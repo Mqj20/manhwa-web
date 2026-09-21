@@ -1,1 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manhwa Web | تجربة قراءة فريدة</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="light-mode">
 
+    <!-- شريط التنقل العلوي -->
+    <header class="main-header">
+        <div class="container header-inner">
+            <a href="index.html" class="logo">
+                <span class="logo-icon">◈</span>
+                <span>Manhwa<span class="logo-accent">Web</span></span>
+            </a>
+            <nav class="main-nav">
+                <a href="#" class="active">الرئيسية</a>
+                <a href="#">الأحدث</a>
+                <a href="#">التصنيفات</a>
+                <a href="#" id="favoritesNav">المفضلة</a>
+            </nav>
+            <div class="header-actions">
+                <button id="themeToggle" class="icon-btn" title="تبديل الوضع">🌙</button>
+                <div id="userArea">
+                    <button id="loginBtn" class="btn-outline">تسجيل الدخول</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- قسم البطل (Hero) -->
+    <section class="hero-section">
+        <div class="container">
+            <h1 class="hero-title">اكتشف عالماً من <span class="gradient-text">القصص المصورة</span></h1>
+            <p class="hero-subtitle">آلاف الفصول، تصنيفات متجددة، وتجربة قراءة لا مثيل لها</p>
+            <div class="search-wrapper">
+                <input type="text" id="searchInput" placeholder="ابحث عن مانهوا، مانجا، أو رواية...">
+                <button id="searchBtn" class="btn-search">🔍</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- الأكثر رواجاً (شريط أفقي) -->
+    <section class="container trending-section">
+        <div class="section-header">
+            <h2>🔥 الأكثر رواجاً</h2>
+            <a href="#" class="see-all">عرض الكل</a>
+        </div>
+        <div class="trending-scroll" id="trendingScroll">
+            <!-- تُملأ بواسطة JS -->
+        </div>
+    </section>
+
+    <!-- التصنيفات -->
+    <section class="container categories-section">
+        <div class="section-header">
+            <h2>📂 تصفح حسب التصنيف</h2>
+        </div>
+        <div class="categories-grid" id="categoriesGrid">
+            <!-- تُملأ بواسطة JS -->
+        </div>
+    </section>
+
+    <!-- المكتبة الرئيسية -->
+    <section class="container library-section">
+        <div class="section-header">
+            <h2>📚 أحدث الإضافات</h2>
+            <div class="view-toggle">
+                <button class="view-btn active" data-view="grid" title="شبكة">▦</button>
+                <button class="view-btn" data-view="list" title="قائمة">☰</button>
+            </div>
+        </div>
+        <div class="manhwa-grid" id="manhwaGrid"></div>
+    </section>
+
+    <!-- تذييل -->
+    <footer class="main-footer">
+        <div class="container">
+            <p>© 2026 Manhwa Web — صُنع بشغف لمحبي القصص المصورة</p>
+        </div>
+    </footer>
+
+    <!-- نافذة تسجيل الدخول -->
+    <div id="authModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <button class="modal-close" id="closeModal">✕</button>
+            <div class="modal-header">
+                <h2 id="modalTitle">مرحباً بك</h2>
+                <p id="modalSubtitle">سجل دخولك للوصول إلى مكتبتك</p>
+            </div>
+            <form id="authForm">
+                <div class="input-group">
+                    <label>اسم المستخدم</label>
+                    <input type="text" id="username" placeholder="أدخل اسمك" required>
+                </div>
+                <div class="input-group">
+                    <label>كلمة المرور</label>
+                    <input type="password" id="password" placeholder="••••••••" required minlength="6">
+                </div>
+                <button type="submit" id="submitAuth" class="btn-primary-full">دخول</button>
+            </form>
+            <p class="modal-toggle">
+                <span id="toggleText">ليس لديك حساب؟</span>
+                <a href="#" id="toggleAuthMode">أنشئ حساباً الآن</a>
+            </p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
