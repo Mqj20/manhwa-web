@@ -1,1 +1,77 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قراءة | Manhwa Web</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .reader-container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .reader-toolbar {
+            display: flex; justify-content: space-between; align-items: center;
+            background: var(--surface); padding: 12px 20px; border-radius: var(--radius);
+            box-shadow: var(--shadow); margin-bottom: 20px; position: sticky; top: 80px; z-index: 50;
+        }
+        .reader-toolbar h2 { font-size: 1.1rem; }
+        .reader-toolbar .controls { display: flex; gap: 8px; }
+        .reader-toolbar button {
+            padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--surface-2); color: var(--text); cursor: pointer;
+            font-family: inherit; font-size: 0.85rem; transition: all var(--transition);
+        }
+        .reader-toolbar button:hover { background: var(--primary); color: white; border-color: var(--primary); }
+        .reader-toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
 
+        .reader-pages { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+        .reader-pages img { width: 100%; max-width: 800px; display: block; border-radius: 4px; }
+
+        .reader-nav { display: flex; justify-content: center; gap: 12px; margin-top: 30px; padding-bottom: 50px; }
+        .reader-nav button {
+            padding: 12px 30px; border-radius: 25px; border: none;
+            background: var(--primary); color: white; font-weight: 700;
+            font-family: inherit; cursor: pointer; transition: all var(--transition);
+        }
+        .reader-nav button:hover { background: var(--primary-hover); transform: translateY(-2px); }
+        .reader-nav button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .progress-bar {
+            position: fixed; top: 0; left: 0; height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            z-index: 200; transition: width 0.1s;
+        }
+        body.dark-mode .reader-toolbar { background: rgba(26,26,46,0.95); }
+    </style>
+</head>
+<body class="light-mode">
+    <div class="progress-bar" id="progressBar"></div>
+
+    <header class="main-header">
+        <div class="container header-inner">
+            <a href="index.html" class="logo"><span class="logo-icon">◈</span><span>Manhwa<span class="logo-accent">Web</span></span></a>
+            <div class="header-actions">
+                <button id="themeToggle" class="icon-btn">🌙</button>
+                <a href="index.html" class="btn-outline" style="text-decoration:none;">← العودة</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="reader-container">
+        <div class="reader-toolbar">
+            <h2 id="chapterTitle">جاري التحميل...</h2>
+            <div class="controls">
+                <button id="prevBtn" disabled>← السابق</button>
+                <button id="nextBtn" disabled>التالي →</button>
+            </div>
+        </div>
+
+        <div class="reader-pages" id="readerPages"></div>
+
+        <div class="reader-nav">
+            <button id="prevBtn2" disabled>← الفصل السابق</button>
+            <button id="nextBtn2" disabled>الفصل التالي →</button>
+        </div>
+    </div>
+
+    <script src="reader.js"></script>
+</body>
+</html>
