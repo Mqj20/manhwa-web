@@ -1,1 +1,35 @@
+name: جمع المانهوا تلقائياً
 
+on:
+  schedule:
+    # يعمل كل يوم الساعة 3 صباحاً بتوقيت UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:  # للسماح بتشغيله يدوياً من التلفون
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: تنزيل المستودع
+        uses: actions/checkout@v4
+      
+      - name: تثبيت Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: تثبيت المكتبات
+        run: |
+          pip install requests beautifulsoup4
+      
+      - name: تشغيل سكريبت جمع المانهوا
+        run: python scraper.py
+      
+      - name: حفظ الملف في المستودع
+        run: |
+          git config user.name "Auto Scraper"
+          git config user.email "auto@scraper.com"
+          git add manhwa.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "تحديث بيانات المانهوا"
+          git push
