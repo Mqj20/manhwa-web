@@ -2,36 +2,30 @@ name: Scrape Manhwa Data
 
 on:
   schedule:
-    - cron: '0 */12 * * *' # يعمل تلقائياً كل 12 ساعة
-  workflow_dispatch: # يتيح لك التشغيل اليادوي بنقرة زر من GitHub
+    - cron: '0 */12 * * *' # تشغيل كل 12 ساعة
+  workflow_dispatch: # إمكانية التشغيل اليدوي بنقرة زر
   push:
     branches:
       - main
 
 jobs:
-  build-and-scrape:
+  scrape:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
+    - name: Checkout Code
       uses: actions/checkout@v3
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-python-version: '3.10'
-
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests beautifulsoup4
+        python-version: '3.10'
 
     - name: Run Scraper Script
       run: python scraper.py
 
-    - name: Commit and Push Updated Data
+    - name: Commit and Push Changes
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add manhwas.json
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update manhwa list [skip ci]" && git push)
+        git add manhwa.json
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update manhwa.json database [skip ci]" && git push)
