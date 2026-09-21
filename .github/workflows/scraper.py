@@ -2,136 +2,113 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import time
-import re
+import os
 
-def scrape_manhwaarab():
-    print("ManhwaArab...")
-    results = []
-    base = "https://manhwaarab.com"
-    for page in range(1, 60):
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
+}
+
+def scrape_like_manga(max_pages=3):
+    print("[+] جاري كشط موقع Like-Manga...")
+    manhwas = []
+    for page in range(1, max_pages + 1):
+        url = f"https://like-manga.net/manga-genre/%D9%85%D8%A7%D9%8BD9%87%D9%88%D8%A7/page/{page}/"
         try:
-            url = base + "/manga?page=" + str(page)
-            print("Page " + str(page))
-            r = requests.get(url, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
-            if r.status_code != 200:
+            res = requests.get(url, headers=HEADERS, timeout=10)
+            if res.status_code != 200:
                 break
-            soup = BeautifulSoup(r.text, 'html.parser')
-            cards = soup.find_all('a', href=re.compile(r'/manga/'))
-            new_count = 0
-            for link in cards:
-                try:
-                    href = link.get('href', '')
-                    if '/manga/' not in href:
-                        continue
-                    if not href.startswith('http'):
-                        href = base + href
-                    if any(x['url'] == href for x in results):
-                        continue
-                    title = link.get_text(strip=True)
-                    if not title or len(title) < 2:
-                        continue
-                    img = link.find('img')
-                    cover = ""
-                    if img:
-                        cover = img.get('src') or img.get('data-src') or ""
-                    results.append({
-                        "id": abs(hash(href)) % 1000000,
-                        "title": title,
-                        "title_ar": title,
-                        "cover": cover,
-                        "summary": "",
-                        "status": "ongoing",
-                        "genres": [],
-                        "latest_chapter": 0,
-                        "rating": 8.0,
-                        "url": href
-                    })
-                    new_count += 1
-                except:
-                    continue
-            print("Added " + str(new_count))
-            if new_count == 0 and page > 2:
-                break
+            soup = BeautifulSoup(res.text, 'html.parser')
+            items = soup.select('.page-item-detail, .manga-item, .badge-pos-1')
+            if not items:
+                items = soup.select('.col-6.col-md-3, .item-summary')
+                
+            for item in items:
+                title_el = item.select_one('.post-title a, .manga-name a, h3 a, a[title]')
+                img_el = item.select_one('img')
+                if title_el:
+                    title = title_el.text.strip()
+                    link = title_el.get('href', '')
+                    img_src = ''
+                    if img_el:
+                        img_src = img_el.get('data-src') or img_el.get('src') or ''
+                    
+                    if title and link:
+                        manhwas.append({
+                            'title': title,
+                            'link': link,
+                            'cover': img_src,
+                            'source': 'Like-Manga'
+                        })
             time.sleep(1)
         except Exception as e:
-            print("Error: " + str(e))
+            print(f"خطأ في Like-Manga صفحة {page}: {e}")
             break
-    return results
+    return manhwas
+
+def scrape_meshmanga():
+    print("[+] جاري كشط موقع MeshManga...")
+    manhwas = []
+    url = "https://meshmanga.com/"
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            items = soup.select('.bsx, .utao, .page-item-detail, article')
+            for item in items:
+                a_tag = item.select_one('a')
+                img_tag = item.select_one('img')
+                title_tag = item.select_one('.tt, .post-title, h3, h4')
+                
+                title = title_tag.text.strip() if title_tag else (a_tag.get('title', '').strip() if a_tag else '')
+                link = a_tag.get('href', '') if a_tag else ''
+                cover = img_tag.get('data-src') or img_tag.get('src') if img_tag else ''
+                
+                if title and link:
+                    manhwas.append({
+                        'title': title,
+                        'link': link,
+                        'cover': cover,
+                        'source': 'MeshManga'
+                    })
+    except Exception as e:
+        print(f"خطأ في MeshManga: {e}")
+    return manhwas
 
 def scrape_olympustaff():
-    print("Olympustaff...")
-    results = []
-    base = "https://olympustaff.com"
-    for page in range(1, 130):
-        try:
-            url = base + "/series?page=" + str(page)
-            print("Page " + str(page))
-            r = requests.get(url, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
-            if r.status_code != 200:
-                break
-            soup = BeautifulSoup(r.text, 'html.parser')
-            cards = soup.find_all('a', href=re.compile(r'/series/'))
-            new_count = 0
-            for link in cards:
-                try:
-                    href = link.get('href', '')
-                    if not href.startswith('http'):
-                        href = base + href
-                    if any(x['url'] == href for x in results):
-                        continue
-                    title = link.get_text(strip=True)
-                    if not title or len(title) < 2:
-                        continue
-                    img = link.find('img')
-                    cover = ""
-                    if img:
-                        cover = img.get('src') or img.get('data-src') or ""
-                    results.append({
-                        "id": abs(hash(href)) % 1000000,
-                        "title": title,
-                        "title_ar": title,
-                        "cover": cover,
-                        "summary": "",
-                        "status": "ongoing",
-                        "genres": [],
-                        "latest_chapter": 0,
-                        "rating": 8.0,
-                        "url": href
+    print("[+] جاري كشط موقع Olympus Staff...")
+    manhwas = []
+    url = "https://olympustaff.com/"
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            items = soup.select('a[href*="/series/"]')
+            for a in items:
+                title = a.text.strip()
+                link = a.get('href', '')
+                if title and len(title) > 2 and link not in [m['link'] for m in manhwas]:
+                    manhwas.append({
+                        'title': title,
+                        'link': link,
+                        'cover': '',
+                        'source': 'OlympusStaff'
                     })
-                    new_count += 1
-                except:
-                    continue
-            print("Added " + str(new_count))
-            if new_count == 0 and page > 2:
-                break
-            time.sleep(1)
-        except Exception as e:
-            print("Error: " + str(e))
-            break
-    return results
-
-def main():
-    all_data = []
-    try:
-        all_data.extend(scrape_manhwaarab())
     except Exception as e:
-        print("ManhwaArab failed: " + str(e))
-    try:
-        all_data.extend(scrape_olympustaff())
-    except Exception as e:
-        print("Olympustaff failed: " + str(e))
-    
-    seen = set()
-    unique = []
-    for item in all_data:
-        if item['url'] not in seen:
-            seen.add(item['url'])
-            unique.append(item)
-    
-    with open('manhwa.json', 'w', encoding='utf-8') as f:
-        json.dump({"manhwa": unique}, f, ensure_ascii=False, indent=2)
-    
-    print("Done! Total: " + str(len(unique)))
+        print(f"خطأ في OlympusStaff: {e}")
+    return manhwas
 
 if __name__ == "__main__":
-    main()
+    results = []
+    results.extend(scrape_like_manga())
+    results.extend(scrape_meshmanga())
+    results.extend(scrape_olympustaff())
+
+    # إزالة التكرار بناءً على الرابط
+    unique_manhwas = list({m['link']: m for m in results}.values())
+
+    # حفظ البيانات في ملف JSON لتقرأها واجهة المستخدم
+    with open('manhwas.json', 'w', encoding='utf-8') as f:
+        json.dump(unique_manhwas, f, ensure_ascii=False, indent=4)
+
+    print(f"[✔] تم جلب وحفظ {len(unique_manhwas)} مانهوا بنجاح في ملف manhwas.json!")
