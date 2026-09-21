@@ -7,6 +7,8 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'manhwa.json' # يمنع تشغيل الأكشن مجدداً عند تحديث ملف الـ JSON تلقائياً
 
 jobs:
   scrape:
@@ -35,4 +37,4 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git add manhwa.json
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update manhwa.json" && git push)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update manhwa.json [HEAD]" && git push)
