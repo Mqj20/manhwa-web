@@ -1,9 +1,18 @@
+
+// MQJ MANHWA 3.1 — single-file data mode
+const EMBEDDED_CATALOG = [{"id": "demo-1", "title": "سيد السيف الأخير", "description": "عنوان تجريبي لعرض بنية المنصة والقارئ. استبدله ببيانات المانهوا المرخصة لديك.", "genres": ["أكشن", "فانتازيا"], "updated": "2026-09-20", "chapters": [{"id": "demo-1-ch-1", "number": "1"}]}, {"id": "demo-2", "title": "العودة إلى البرج", "description": "عنوان تجريبي آخر.", "genres": ["فانتازيا", "دراما"], "updated": "2026-09-18", "chapters": [{"id": "demo-2-ch-1", "number": "1"}]}, {"id": "demo-3", "title": "حب في العالم الآخر", "description": "عنوان تجريبي.", "genres": ["رومانسية", "كوميديا"], "updated": "2026-09-15", "chapters": [{"id": "demo-3-ch-1", "number": "1"}]}];
+const EMBEDDED_CHAPTERS = {
+  "demo-1-ch-1": {"pages":[]},
+  "demo-2-ch-1": {"pages":[]},
+  "demo-3-ch-1": {"pages":[]}
+};
+
 const state={items:[],genre:"الكل",query:"",sort:"new",shown:24};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
 function toast(t){const x=$("#toast");x.textContent=t;x.style.display="block";setTimeout(()=>x.style.display="none",2200)}
 async function init(){
- try{const r=await fetch("data/catalog.json");state.items=await r.json()}catch(e){state.items=[]}
+ state.items=EMBEDDED_CATALOG;
  render();
 }
 function filtered(){
@@ -35,7 +44,7 @@ document.addEventListener("click",async e=>{
  const id=b.dataset.read,ch=b.dataset.ch; const x=state.items.find(a=>a.id===id);
  $("#detailModal").classList.remove("show");$("#reader").classList.add("show");$("#readerTitle").textContent=x.title;$("#readerChapter").textContent="الفصل "+ch;
  const p=$("#pages");p.innerHTML='<div class="pageNote">جاري تحميل الفصل…</div>';
- try{const r=await fetch("data/chapters/"+encodeURIComponent(ch)+".json");const d=await r.json();p.innerHTML=(d.pages||[]).map(u=>`<img class="page" loading="lazy" src="${esc(u)}" alt="">`).join("")||'<div class="pageNote">لا توجد صفحات لهذا الفصل.</div>'}
+ try{const d=EMBEDDED_CHAPTERS[ch]||{pages:[]};p.innerHTML=(d.pages||[]).map(u=>`<img class="page" loading="lazy" src="${esc(u)}" alt="">`).join("")||'<div class="pageNote">لا توجد صفحات لهذا الفصل.</div>'}
  catch{p.innerHTML='<div class="pageNote">لم تتم إضافة صفحات هذا الفصل بعد.</div>'}
 });
 $("#closeReader").onclick=()=>$("#reader").classList.remove("show");
