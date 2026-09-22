@@ -1,147 +1,386 @@
-"""MQJ Manhwa synchronizer.
+"""MQJ MANHWA catalog synchronizer.
 
-For content you are authorized to reproduce. Supports catalog discovery and,
-when MIRROR_MEDIA=true, copying chapter images to Cloudflare R2/S3-compatible
-storage. It never bypasses login, CAPTCHA, paywalls, or anti-bot controls.
+Use only with sources/content you are authorized to index and display.
+This script does not bypass login, CAPTCHA, paywalls, anti-bot controls, DRM,
+or other access restrictions. It only follows publicly reachable pages.
+
+The synchronizer writes catalog.json and sync_status.json at the repository root.
 """
-import os, re, json, time, hashlib
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import time
 from urllib.parse import urljoin, urlparse
+
 import requests
 from bs4 import BeautifulSoup
 
-HEADERS={'User-Agent': os.getenv('MQJ_USER_AGENT','MQJ-Manhwa-Sync/2.0 (+authorized-content)')}
-SOURCES={
- 'olympus': os.getenv('OLYMPUS_URL','https://olympustaff.com/'),
- 'mesh': os.getenv('MESH_URL','https://meshmanga.com/')
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; MQJ-Manhwa-Sync/4.2; +https://github.com/)"
 }
-MAX_SERIES=int(os.getenv('MAX_SERIES','0'))
-MAX_CHAPTERS=int(os.getenv('MAX_CHAPTERS','0'))
-MIRROR=os.getenv('MIRROR_MEDIA','false').lower()=='true'
-ASSET_PREFIX=os.getenv('ASSET_PREFIX','mqj')
+TIMEOUT = 30
+MAX_PAGES_PER_SOURCE = int(os.getenv("MQJ_MAX_LIST_PAGES", "130"))
+MAX_SERIES_PER_SOURCE = int(os.getenv("MQJ_MAX_SERIES", "1500"))
+MAX_CHAPTERS_PER_SERIES = int(os.getenv("MQJ_MAX_CHAPTERS", "200"))
 
-session=requests.Session(); session.headers.update(HEADERS)
+SOURCES = {
+    "olympus": {
+        "name": "Olympus / Team-X",
+        "base": "https://olympustaff.com/",
+        "list_pages": ["https://olympustaff.com/series"],
+        "series_patterns": [r"/series/"],
+    },
+    "mesh": {
+        "name": "MeshManga",
+        "base": "https://meshmanga.com/",
+        "list_pages": ["https://meshmanga.com/type/manga", "https://meshmanga.com/menu/type/comic"],
+        "series_patterns": [r"/series/"],
+    },
+}
 
-def get(url, binary=False):
-    r=session.get(url,timeout=30)
-    r.raise_for_status()
-    return r.content if binary else r.text
+session = requests.Session()
+session.headers.update(HEADERS)
 
-def clean(s): return re.sub(r'\s+',' ',s or '').strip()
-def samehost(a,b): return urlparse(a).netloc==urlparse(b).netloc
 
-def sitemap_urls(base, depth=0):
-    if depth>2: return []
-    found=[]
-    for path in ('sitemap.xml','sitemap_index.xml','wp-sitemap.xml'):
+def clean(value: str | None) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def same_host(a: str, b: str) -> bool:
+    return urlparse(a).netloc.lower() == urlparse(b).netloc.lower()
+
+
+def get(url: str) -> str:
+    last = None
+    for attempt in range(3):
         try:
-            xml=get(urljoin(base,path))
-            locs=re.findall(r'<loc>\s*(.*?)\s*</loc>',xml,re.I)
-            for u in locs:
-                if u.lower().endswith('.xml') and samehost(u,base):
-                    found.extend(sitemap_urls(u,depth+1))
-                else: found.append(u.strip())
-        except Exception: pass
+            r = session.get(url, timeout=TIMEOUT, allow_redirects=True)
+            r.raise_for_status()
+            return r.text
+        except requests.RequestException as exc:
+            last = exc
+            time.sleep(1.5 * (attempt + 1))
+    raise last  # type: ignore[misc]
+
+
+def abs_url(base: str, href: str | None) -> str:
+    return urljoin(base, href or "")
+
+
+def is_series_url(url: str, cfg: dict) -> bool:
+    p = urlparse(url).path.lower()
+    return any(re.search(pattern, p, re.I) for pattern in cfg["series_patterns"])
+
+
+def sitemap_urls(base: str) -> list[str]:
+    """Read normal sitemap XML and simple sitemap indexes without bypassing anything."""
+    found: list[str] = []
+    queue = [urljoin(base, "sitemap.xml"), urljoin(base, "sitemap_index.xml")]
+    seen = set()
+    while queue and len(seen) < 20:
+        sm = queue.pop(0)
+        if sm in seen:
+            continue
+        seen.add(sm)
+        try:
+            xml = get(sm)
+        except Exception:
+            continue
+        locs = re.findall(r"<loc>\s*(.*?)\s*</loc>", xml, flags=re.I | re.S)
+        for loc in locs:
+            loc = clean(loc)
+            if not loc:
+                continue
+            if loc.lower().endswith(".xml") or "sitemap" in loc.lower():
+                if len(queue) < 50:
+                    queue.append(loc)
+            else:
+                found.append(loc)
     return list(dict.fromkeys(found))
 
-def discover_series(base):
-    urls=sitemap_urls(base)
-    series=[u for u in urls if re.search(r'/(?:series|manga|manhwa|comic|title)/',u,re.I)]
-    if series: return sorted(set(series))[:MAX_SERIES or None]
+
+def pagination_urls(page_url: str, soup: BeautifulSoup, base: str) -> list[str]:
+    out = []
+    for a in soup.select("a[href]"):
+        u = abs_url(page_url, a.get("href"))
+        if not same_host(u, base):
+            continue
+        text = clean(a.get_text(" ", strip=True)).lower()
+        path = urlparse(u).path.lower()
+        query = urlparse(u).query.lower()
+        if (
+            "page=" in query
+            or "/page/" in path
+            or text in {"›", "»", "next", "التالي", "التالية"}
+            or re.fullmatch(r"\d+", text or "")
+        ):
+            out.append(u)
+    return list(dict.fromkeys(out))
+
+
+def discover_series(cfg: dict) -> list[str]:
+    base = cfg["base"]
+    series: set[str] = set()
+
+    # 1) Public sitemap, when available.
+    for u in sitemap_urls(base):
+        if is_series_url(u, cfg):
+            series.add(u)
+            if len(series) >= MAX_SERIES_PER_SOURCE:
+                return sorted(series)
+
+    # 2) Public series/list pages with pagination.
+    queue = list(cfg["list_pages"])
+    seen_pages: set[str] = set()
+    while queue and len(seen_pages) < MAX_PAGES_PER_SOURCE and len(series) < MAX_SERIES_PER_SOURCE:
+        page = queue.pop(0)
+        if page in seen_pages:
+            continue
+        seen_pages.add(page)
+        try:
+            html = get(page)
+        except Exception as exc:
+            print("list page failed", page, exc)
+            continue
+        soup = BeautifulSoup(html, "html.parser")
+        for a in soup.select("a[href]"):
+            u = abs_url(page, a.get("href"))
+            if same_host(u, base) and is_series_url(u, cfg):
+                series.add(u.split("#", 1)[0])
+                if len(series) >= MAX_SERIES_PER_SOURCE:
+                    break
+        for nxt in pagination_urls(page, soup, base):
+            if nxt not in seen_pages and len(seen_pages) + len(queue) < MAX_PAGES_PER_SOURCE:
+                queue.append(nxt)
+
+    # 3) Homepage fallback for installations where list pages are rendered dynamically.
+    if not series:
+        try:
+            soup = BeautifulSoup(get(base), "html.parser")
+            for a in soup.select("a[href]"):
+                u = abs_url(base, a.get("href"))
+                if same_host(u, base) and is_series_url(u, cfg):
+                    series.add(u.split("#", 1)[0])
+        except Exception as exc:
+            print("homepage failed", base, exc)
+
+    return sorted(series)
+
+
+def image_from_meta(soup: BeautifulSoup, page_url: str) -> str:
+    for selector in (
+        'meta[property="og:image"]',
+        'meta[name="twitter:image"]',
+        'meta[property="twitter:image"]',
+    ):
+        tag = soup.select_one(selector)
+        if tag and tag.get("content"):
+            return abs_url(page_url, tag["content"])
+    return ""
+
+
+def parse_series(url: str, source_id: str, cfg: dict) -> dict | None:
+    soup = BeautifulSoup(get(url), "html.parser")
+    h = soup.select_one("h1") or soup.select_one("h2")
+    title = clean(h.get_text(" ", strip=True) if h else "")
+    if not title:
+        title = clean((soup.select_one('meta[property="og:title"]') or {}).get("content", ""))
+    if not title:
+        return None
+
+    cover = image_from_meta(soup, url)
+    md = soup.select_one('meta[property="og:description"]')
+    desc = clean(md.get("content") if md else "")
+
+    genres = []
+    genre_words = {
+        "أكشن", "فانتازيا", "دراما", "رومانسية", "كوميديا", "رعب", "غموض",
+        "مغامرات", "شونين", "ويب تون", "مانهوا", "مانها", "مانجا", "Action",
+        "Fantasy", "Drama", "Romance", "Comedy", "Horror"
+    }
+    for a in soup.select("a[href]"):
+        t = clean(a.get_text(" ", strip=True))
+        if t in genre_words:
+            genres.append(t)
+
+    chapters = []
+    for a in soup.select("a[href]"):
+        href = abs_url(url, a.get("href"))
+        txt = clean(a.get_text(" ", strip=True))
+        if not href or not same_host(href, url):
+            continue
+        # Chapter links are intentionally restricted to public source pages.
+        m = re.search(r"(?:الفصل(?:\s+رقم)?|chapter)\s*#?\s*([0-9]+(?:\.[0-9]+)?)", txt, re.I)
+        if not m:
+            # Some pages expose only a numeric chapter title.
+            path = urlparse(href).path
+            m = re.search(r"(?:chapter|chap|الفصل)[/_-]*([0-9]+(?:\.[0-9]+)?)", path, re.I)
+        if not m:
+            continue
+        # Do not import clearly marked paid chapters.
+        marker = f"{txt} {href}".lower()
+        if any(x in marker for x in ("مدفوع", "paid", "premium", "شراء")):
+            continue
+        number = m.group(1)
+        cid = hashlib.sha1(href.encode()).hexdigest()[:16]
+        chapters.append({"id": cid, "number": number, "title": txt, "url": href})
+
+    # De-duplicate and keep a deterministic order.
+    dedup = {}
+    for ch in chapters:
+        dedup[ch["url"]] = ch
+    chapters = list(dedup.values())
+    chapters.sort(key=lambda c: float(c["number"]) if c["number"].replace('.', '', 1).isdigit() else 0)
+    chapters = chapters[-MAX_CHAPTERS_PER_SERIES:]
+
+    if not chapters:
+        return None
+
+    sid = hashlib.sha1((source_id + "|" + url).encode()).hexdigest()[:16]
+    return {
+        "id": sid,
+        "title": title,
+        "description": desc,
+        "genres": sorted(set(genres)),
+        "updated": time.strftime("%Y-%m-%d"),
+        "cover": cover,
+        "source": source_id,
+        "sourceName": cfg["name"],
+        "chapterCount": len(chapters),
+        "chapters": chapters,
+    }
+
+
+def page_urls_from_srcset(value: str, page_url: str) -> list[str]:
+    out = []
+    for part in (value or "").split(","):
+        u = part.strip().split(" ", 1)[0]
+        if u:
+            out.append(abs_url(page_url, u))
+    return out
+
+
+def enrich_chapter(ch: dict) -> dict:
     try:
-        soup=BeautifulSoup(get(base),'html.parser')
-        out=[]
-        for a in soup.select('a[href]'):
-            u=urljoin(base,a.get('href')); t=clean(a.get_text(' ',strip=True))
-            if samehost(u,base) and t and re.search(r'/(?:series|manga|manhwa|comic|title)/',u,re.I): out.append(u)
-        return sorted(set(out))[:MAX_SERIES or None]
-    except Exception: return []
+        soup = BeautifulSoup(get(ch["url"]), "html.parser")
+    except Exception as exc:
+        ch["pages"] = []
+        ch["readerError"] = str(exc)[:180]
+        return ch
 
-def parse_series(url,source_id):
-    soup=BeautifulSoup(get(url),'html.parser')
-    h=soup.select_one('h1,h2')
-    title=clean(h.get_text(' ',strip=True) if h else '')
-    if not title: return None
-    og=soup.select_one('meta[property="og:image"]'); cover=urljoin(url,og.get('content')) if og and og.get('content') else ''
-    md=soup.select_one('meta[property="og:description"]'); desc=clean(md.get('content')) if md else ''
-    genres=[]
-    for a in soup.select('a[href]'):
-        t=clean(a.get_text(' ',strip=True))
-        if 1 < len(t) < 30 and t in {'أكشن','فانتازيا','دراما','رومانسية','كوميديا','رعب','غموض','مغامرات','شونين','ويب تون','Manhwa','Manga'}: genres.append(t)
-    chapters=[]; seen=set()
-    for a in soup.select('a[href]'):
-        href=urljoin(url,a.get('href')); txt=clean(a.get_text(' ',strip=True))
-        if not samehost(href,url): continue
-        m=re.search(r'(?:الفصل|chapter|chap)\s*#?\s*([0-9]+(?:\.[0-9]+)?)',txt,re.I)
-        if not m: continue
-        if href in seen: continue
-        seen.add(href); n=m.group(1)
-        chapters.append({'id':hashlib.sha1(href.encode()).hexdigest()[:16],'number':n,'title':txt,'url':href})
-    chapters=chapters[:MAX_CHAPTERS or None]
-    if not chapters: return None
-    sid=hashlib.sha1((source_id+'|'+url).encode()).hexdigest()[:16]
-    return {'id':sid,'title':title,'description':desc,'genres':sorted(set(genres)),'updated':time.strftime('%Y-%m-%d'),'cover':cover,'source':source_id,'sourceName':'Olympus / Team-X' if source_id=='olympus' else 'MeshManga','chapterCount':len(chapters),'chapters':chapters}
+    urls = []
+    for img in soup.select("img"):
+        for attr in ("data-src", "data-original", "data-lazy-src", "data-lazy", "src"):
+            val = img.get(attr)
+            if val:
+                urls.append(abs_url(ch["url"], val))
+        if img.get("srcset"):
+            urls.extend(page_urls_from_srcset(img.get("srcset"), ch["url"]))
 
-def ext_for(url, content_type=''):
-    p=urlparse(url).path.lower()
-    m=re.search(r'\.(jpe?g|png|webp|gif)$',p)
-    if m: return '.'+m.group(1).replace('jpeg','jpg')
-    if 'png' in content_type: return '.png'
-    if 'webp' in content_type: return '.webp'
-    return '.jpg'
+    # Some readers expose image URLs in JSON-LD.
+    for script in soup.select('script[type="application/ld+json"]'):
+        raw = script.string or script.get_text()
+        for u in re.findall(r"https?://[^\"'<>\\s]+", raw or ""):
+            if re.search(r"\.(?:jpe?g|png|webp|gif)(?:\?|$)", u, re.I):
+                urls.append(u)
 
-def mirror_bytes(url, source_id, series_id, chapter_id, index):
-    """Mirror to R2 if configured. Returns public URL, otherwise empty."""
-    if not MIRROR: return ''
-    endpoint=os.getenv('R2_ENDPOINT'); bucket=os.getenv('R2_BUCKET'); public=os.getenv('R2_PUBLIC_BASE')
-    if not all([endpoint,bucket,public]):
-        raise RuntimeError('MIRROR_MEDIA=true requires R2_ENDPOINT, R2_BUCKET and R2_PUBLIC_BASE')
-    try:
-        import boto3
-        body=get(url,binary=True)
-        ct=session.head(url,timeout=20).headers.get('content-type','image/jpeg')
-        ext=ext_for(url,ct)
-        key=f"{ASSET_PREFIX}/{source_id}/{series_id}/{chapter_id}/{index:04d}{ext}"
-        s3=boto3.client('s3',endpoint_url=endpoint,aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY'])
-        s3.put_object(Bucket=bucket,Key=key,Body=body,ContentType=ct,CacheControl='public,max-age=31536000,immutable')
-        return public.rstrip('/')+'/'+key
-    except Exception as e:
-        print('mirror failed',url,e); return ''
+    clean_urls = []
+    for u in urls:
+        if not u or u.startswith("data:"):
+            continue
+        if not re.match(r"^https?://", u, re.I):
+            continue
+        if re.search(r"\.(?:jpe?g|png|webp|gif)(?:\?|$)", u, re.I) or any(k in u.lower() for k in ("image", "chapter", "uploads")):
+            if not re.search(r"(logo|avatar|icon|favicon|sprite|emoji)", u, re.I):
+                clean_urls.append(u)
 
-def enrich_chapter(ch,source_id,series_id):
-    try: soup=BeautifulSoup(get(ch['url']),'html.parser')
-    except Exception: return ch
-    urls=[]
-    for img in soup.select('img[src],img[data-src],img[data-lazy-src],img[data-original]'):
-        u=img.get('data-src') or img.get('data-lazy-src') or img.get('data-original') or img.get('src')
-        if not u: continue
-        u=urljoin(ch['url'],u)
-        if u.startswith('data:') or re.search(r'(logo|avatar|icon|favicon)',u,re.I): continue
-        if re.search(r'\.(?:jpe?g|png|webp|gif)(?:\?|$)',u,re.I) or 'image' in u.lower(): urls.append(u)
-    urls=list(dict.fromkeys(urls))
-    pages=[]
-    for i,u in enumerate(urls,1):
-        mirrored=mirror_bytes(u,source_id,series_id,ch['id'],i)
-        pages.append(mirrored or u)
-        time.sleep(.05)
-    ch['pages']=pages
-    ch['mirrored']=bool(MIRROR and pages and all(not p.startswith(('http://','https://')) for p in pages))
+    ch["pages"] = list(dict.fromkeys(clean_urls))
     return ch
 
+
+def write_status(status: dict):
+    with open("sync_status.json", "w", encoding="utf-8") as f:
+        json.dump(status, f, ensure_ascii=False, indent=2)
+
+
 def main():
-    all_items=[]
-    for sid,base in SOURCES.items():
-        try: series=discover_series(base)
-        except Exception as e: print('source failed',sid,e); continue
-        print(sid,'series',len(series))
+    started = time.time()
+    all_items = []
+    status = {
+        "startedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "sources": {},
+        "limits": {
+            "listPages": MAX_PAGES_PER_SOURCE,
+            "series": MAX_SERIES_PER_SOURCE,
+            "chaptersPerSeries": MAX_CHAPTERS_PER_SERIES,
+        },
+    }
+
+    for sid, cfg in SOURCES.items():
+        source_status = {"seriesDiscovered": 0, "titlesWritten": 0, "errors": []}
+        try:
+            series = discover_series(cfg)
+            source_status["seriesDiscovered"] = len(series)
+        except Exception as exc:
+            source_status["errors"].append(f"discover: {exc}")
+            series = []
+
+        print(sid, "series", len(series))
         for u in series:
             try:
-                item=parse_series(u,sid)
-                if not item: continue
-                item['chapters']=[enrich_chapter(c,sid,item['id']) for c in item['chapters']]
-                item['chapterCount']=len(item['chapters'])
+                item = parse_series(u, sid, cfg)
+                if not item:
+                    continue
+                enriched = []
+                for ch in item["chapters"]:
+                    enriched.append(enrich_chapter(ch))
+                    time.sleep(0.08)
+                item["chapters"] = enriched
+                item["chapterCount"] = len(enriched)
                 all_items.append(item)
-            except Exception as e: print('skip',u,e)
-    with open('catalog.json','w',encoding='utf-8') as f:
-        json.dump({'generatedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'mirrorMedia':MIRROR,'items':all_items},f,ensure_ascii=False,separators=(',',':'))
-    print('wrote',len(all_items),'titles')
-if __name__=='__main__': main()
+                source_status["titlesWritten"] += 1
+            except Exception as exc:
+                msg = f"{u}: {exc}"
+                print("skip", msg)
+                source_status["errors"].append(msg[:300])
+            time.sleep(0.05)
+
+        status["sources"][sid] = source_status
+
+    # Safety: never replace a previously working catalog with an empty catalog.
+    if not all_items and os.path.exists("catalog.json"):
+        try:
+            with open("catalog.json", "r", encoding="utf-8") as f:
+                previous = json.load(f)
+            previous_items = previous.get("items", []) if isinstance(previous, dict) else []
+        except Exception:
+            previous_items = []
+        if previous_items:
+            status["preservedPreviousCatalog"] = True
+            status["finalItemCount"] = len(previous_items)
+            status["durationSeconds"] = round(time.time() - started, 2)
+            write_status(status)
+            print("No new items found; preserved existing catalog with", len(previous_items), "titles")
+            return
+
+    all_items.sort(key=lambda x: (x["source"], x["title"].lower()))
+    catalog = {
+        "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "items": all_items,
+    }
+    with open("catalog.json", "w", encoding="utf-8") as f:
+        json.dump(catalog, f, ensure_ascii=False, separators=(",", ":"))
+
+    status["preservedPreviousCatalog"] = False
+    status["finalItemCount"] = len(all_items)
+    status["finalChapterCount"] = sum(len(x.get("chapters", [])) for x in all_items)
+    status["durationSeconds"] = round(time.time() - started, 2)
+    write_status(status)
+    print("wrote", len(all_items), "titles")
+
+
+if __name__ == "__main__":
+    main()
