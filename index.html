@@ -1,86 +1,61 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#090b14">
-  <title>MQJ Manhwa — مكتبة المانهوا</title>
-  <meta name="description" content="مكتبة مانهوا حديثة مع آلاف العناوين، البحث، التصنيفات، الفصول والقارئ.">
-  <link rel="preconnect" href="https://api.mangadex.org">
-  <link rel="preconnect" href="https://uploads.mangadex.org">
-  <link rel="stylesheet" href="style.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MQJ MANHWA — منصة قراءة المانهوا</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="bg"></div>
-  <header class="topbar">
-    <a class="brand" href="#" data-home>
-      <span class="brand-mark">MQJ</span>
-      <span><b>MQJ</b><small>MANHWA</small></span>
-    </a>
-    <nav>
-      <a href="#home" data-home>الرئيسية</a>
-      <a href="#latest" data-sort="latest">الأحدث</a>
-      <a href="#popular" data-sort="popular">الأكثر متابعة</a>
-      <a href="#library" data-library>مكتبتي</a>
-    </nav>
-    <button class="icon-btn" id="themeBtn" aria-label="تبديل المظهر">☼</button>
-  </header>
+<header class="top">
+  <a class="brand" href="#">MQJ <span>MANHWA</span></a>
+  <nav>
+    <a href="#home">الرئيسية</a><a href="#latest">آخر الفصول</a><a href="#popular">الأكثر قراءة</a>
+    <button id="adultBtn" class="adult">🔞 للبالغين</button>
+    <button id="loginBtn" class="ghost">تسجيل الدخول</button>
+  </nav>
+</header>
 
-  <main>
-    <section class="hero" id="home">
-      <div>
-        <span class="eyebrow">مكتبة رقمية ضخمة</span>
-        <h1>آلاف المانهوا.<br><em>مكان واحد.</em></h1>
-        <p>ابحث، اكتشف، احفظ، واقرأ الفصول المتاحة من واجهة سريعة ومصممة للهاتف والشاشات الكبيرة.</p>
-        <div class="hero-search">
-          <input id="searchInput" placeholder="ابحث عن اسم المانهوا..." autocomplete="off">
-          <button id="searchBtn">بحث</button>
-        </div>
-        <div class="chips">
-          <button data-tag="Action">أكشن</button><button data-tag="Romance">رومانسية</button>
-          <button data-tag="Fantasy">فانتازيا</button><button data-tag="Comedy">كوميديا</button>
-          <button data-tag="Adventure">مغامرات</button><button data-tag="Drama">دراما</button>
-        </div>
-      </div>
-      <div class="hero-card">
-        <div class="orbit"></div>
-        <div class="hero-stat"><b id="countLabel">آلاف العناوين</b><span>تُجلب مباشرة من المصدر</span></div>
-      </div>
-    </section>
-
-    <section class="toolbar">
-      <div>
-        <h2 id="sectionTitle">استكشف المانهوا</h2>
-        <p id="sectionSub">تصفح مكتبة ضخمة مع تحميل تدريجي.</p>
-      </div>
-      <div class="controls">
-        <select id="statusFilter">
-          <option value="">كل الحالات</option><option value="ongoing">مستمرة</option>
-          <option value="completed">مكتملة</option><option value="hiatus">متوقفة مؤقتاً</option>
-        </select>
-        <select id="orderFilter">
-          <option value="followedCount">الأكثر متابعة</option>
-          <option value="latestUploadedChapter">أحدث الفصول</option>
-          <option value="rating">الأعلى تقييماً</option>
-          <option value="relevance">الأكثر صلة</option>
-        </select>
-      </div>
-    </section>
-
-    <section id="grid" class="grid" aria-live="polite"></section>
-    <div id="loader" class="loader">جارِ تحميل المانهوا...</div>
-    <button id="moreBtn" class="more">تحميل المزيد</button>
-  </main>
-
-  <div class="modal" id="detailsModal" aria-hidden="true">
-    <div class="modal-box">
-      <button class="close" data-close>×</button>
-      <div id="details"></div>
-    </div>
+<main id="home">
+<section class="hero">
+  <div class="heroText">
+    <p class="eyebrow">MQJ MANHWA</p>
+    <h1>عالم المانهوا<br><b>بين يديك.</b></h1>
+    <p>اكتشف المانهوا، تابع الفصول، واحفظ أعمالك المفضلة في منصة واحدة.</p>
+    <div class="search"><span>⌕</span><input id="search" placeholder="ابحث عن اسم المانهوا..."></div>
   </div>
+  <div class="heroCard"><div>📖</div><strong>قارئ MQJ</strong><small>قراءة مريحة على الهاتف والشاشات</small></div>
+</section>
 
-  <div class="toast" id="toast"></div>
+<section class="chips">
+  <button class="chip active" data-genre="الكل">الكل</button>
+  <button class="chip" data-genre="أكشن">أكشن</button><button class="chip" data-genre="رومانسية">رومانسية</button>
+  <button class="chip" data-genre="فانتازيا">فانتازيا</button><button class="chip" data-genre="دراما">دراما</button>
+  <button class="chip" data-genre="كوميديا">كوميديا</button>
+</section>
 
-  <script src="app.js"></script>
-</body>
-</html>
+<section class="section">
+ <div class="sectionHead"><div><p class="eyebrow">CATALOG</p><h2>المانهوا</h2></div><select id="sort"><option value="new">الأحدث</option><option value="az">الاسم</option></select></div>
+ <div id="grid" class="grid"></div><button id="more" class="more">عرض المزيد</button>
+</section>
+</main>
+
+<div id="detailModal" class="modal"><div class="modalBox"><button class="close" data-close>×</button><div id="detail"></div></div></div>
+
+<div id="reader" class="reader"><div class="readerTop"><button id="closeReader">✕</button><strong id="readerTitle">قارئ MQJ</strong><span id="readerChapter"></span></div><div id="pages"></div></div>
+
+<div id="loginModal" class="modal"><div class="modalBox small"><button class="close" data-close>×</button>
+<h2>تسجيل الدخول</h2><p class="muted">هذا الإصدار التجريبي يستخدم حساباً محلياً على جهازك.</p>
+<input id="username" class="field" placeholder="اسم المستخدم"><button id="doLogin" class="primary">دخول</button>
+</div></div>
+
+<div id="adultModal" class="modal"><div class="modalBox small"><button class="close" data-close>×</button>
+<h2>🔞 قسم البالغين</h2><p>هذا القسم منفصل ويتطلب تسجيل الدخول وتأكيد أنك بعمر 18 سنة أو أكثر.</p>
+<label class="check"><input type="checkbox" id="age18"> أؤكد أن عمري 18 سنة أو أكثر</label>
+<button id="enterAdult" class="primary">متابعة</button>
+</div></div>
+
+<div id="toast"></div>
+<script src="app.js"></script>
+</body></html>
