@@ -3,7 +3,7 @@ const SOURCES = [
   {id:'olympus', name:'Olympus / Team-X', url:'https://olympustaff.com/'},
   {id:'mesh', name:'MeshManga', url:'https://meshmanga.com/'}
 ];
-const state={items:[],genre:'الكل',query:'',sort:'new',shown:24,source:'all'};
+const state={items:[],genre:'الكل',query:'',sort:'new',shown:24,source:'all',status:null};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 function toast(t){const x=$('#toast');x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',2400)}
@@ -12,6 +12,7 @@ async function init(){
   const r=await fetch('catalog.json?'+Date.now(),{cache:'no-store'});
   if(!r.ok) throw new Error('catalog');
   const d=await r.json(); state.items=Array.isArray(d)?d:(d.items||[]);
+  try{ const sr=await fetch('sync_status.json?'+Date.now(),{cache:'no-store'}); if(sr.ok) state.status=await sr.json(); }catch(_){}
  }catch(e){state.items=[]}
  render();
 }
@@ -27,7 +28,7 @@ function filtered(){
 }
 function render(){
  const a=filtered(), list=a.slice(0,state.shown);
- $('#grid').innerHTML=list.map(card).join('') || `<div class="pageNote">${state.items.length?'لا توجد نتائج مطابقة.':'لا توجد بيانات بعد. شغّل مزامنة GitHub Actions لإحضار الكتالوج.'}</div>`;
+ $('#grid').innerHTML=list.map(card).join('') || `<div class="pageNote">${state.items.length?'لا توجد نتائج مطابقة.':(state.status?.finalItemCount===0?'المزامنة لم تجد أعمالًا متاحة. افتح Actions ثم MQJ Manhwa Sync لمراجعة آخر تشغيل.':'لا توجد بيانات بعد. شغّل مزامنة GitHub Actions لإحضار الكتالوج.')}</div>`;
  $('#more').style.display=a.length>state.shown?'block':'none';
  $('#count').textContent=state.items.length;
 }
